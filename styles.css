@@ -63,3 +63,11 @@ html{scroll-padding-top:132px}
 @media(min-width:701px) and (max-width:1100px){.project-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.project-grid article.project-card:last-child{grid-column:1/-1}}
 @media(max-width:700px){.project-grid{grid-template-columns:1fr;gap:20px}.project-grid article.project-card:last-child{grid-column:auto}.project-visual{height:235px}.project-content{padding:24px 21px}.network-grid{grid-template-columns:1fr;gap:15px;margin-top:27px}.network-card{padding:24px 20px}.network-card-heading h3{font-size:23px}}
 @media(prefers-reduced-motion:reduce){.project-grid article.project-card,.project-grid a.project-link,.network-links a{transition:none}.project-card:hover{transform:none}}
+
+/* Small-screen fixes verified by 320px QA. */
+@media(max-width:380px){
+  .hero h1{font-size:clamp(37px,12vw,45px);overflow-wrap:anywhere}
+  .section h2{font-size:clamp(31px,10.4vw,38px);overflow-wrap:anywhere}
+  .network-links a{min-width:0}
+  .hero,.section,.closing{overflow-wrap:break-word}
+}
