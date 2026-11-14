@@ -80,3 +80,7 @@ html{scroll-padding-top:132px}
   .purpose .pillars b{font-size:clamp(16px,4.5vw,19px);overflow-wrap:anywhere}
   .purpose .pillars small{font-size:10px;letter-spacing:.07em;overflow-wrap:anywhere}
 }
+
+/* Preserve the complete square founder portrait and its embedded lettering. */
+.person-photo{aspect-ratio:1/1;min-height:0}
+.person-photo img{object-fit:contain;object-position:center center}
