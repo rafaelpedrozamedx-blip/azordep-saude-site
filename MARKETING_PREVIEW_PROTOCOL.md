@@ -35,6 +35,17 @@ Limites: storage na conta Hobby (sem faturamento de excedente), mas sujeito
 aos limites da plataforma. Lote inicial ~91 MiB (<230 MiB guard).
 Nao colocar videos no repositorio publico ou links do Blob no HTML.
 
+## Legendas: um unico canal visual
+
+Os 15 videos iniciais ja contem legendas faladas embutidas na imagem (burnt-in).
+O player autenticado NAO deve adicionar track VTT, especialmente com default,
+porque isso sobrepoe texto automatico do navegador a legenda do MP4.
+
+Preservar arquivos VTT privados para consulta como transcricao sincronizada separada.
+Se houver um video futuro SEM legendas embutidas, fazer revisao audiovisual por
+ativo antes de mudar a politica de exibicao; nunca combinar camada grafica e VTT
+ativado por padrao. Testes devem validar ausencia de track para estes 15 ativos.
+
 ## Novos lotes de previas
 
 A primeira versao tem IDs editoriais definidos no codigo. Para inserir novas pecas:

@@ -70,6 +70,10 @@ test('authenticated one-player preview and private media streaming, with 206 sup
  assert.equal((html.match(/<video\b/g)||[]).length,1);
  assert(html.includes('/marketing/media/pet-v2-202611-a'));
  assert(html.includes('/marketing/captions/pet-v2-202611-a'));
+ assert(html.includes('As legendas já estão integradas ao vídeo.'));
+ assert(!html.includes('<track'), 'VTT track must NOT be present for burnt-in captions');
+ assert(!html.includes(' srclang='));
+ assert(!html.includes(' default>'));
  const full=await req('/marketing/media/pet-v2-202611-a',{headers:{Cookie:session}});
  assert.equal(full.status,200);
  assert.deepEqual(Buffer.from(await full.arrayBuffer()),video);
@@ -115,4 +119,30 @@ test('disallowed review attempts are rejected and never change state',async()=>{
  assert.equal(unknown.status,404);
  const after=[...bytes].filter(([k])=>k.startsWith('reviews/')).length;
  assert.equal(after,before);
+});
+test('all 15 preview players avoid stacked subtitles and keep VTT as separate transcript',async()=>{
+ session ||= await login();
+ const items=handler._test.ITEMS;
+ assert.equal(items.length,15);
+ const newKeys=[];
+ for(const item of items){
+   const pathname='media/'+item.id+'/master.mp4';
+   const transcript='media/'+item.id+'/captions.vtt';
+   if(!bytes.has(pathname)){bytes.set(pathname,video);newKeys.push(pathname);}
+   if(!bytes.has(transcript)){bytes.set(transcript,caption);newKeys.push(transcript);}
+ }
+ try{
+  for(const item of items){
+   const res=await req('/marketing/preview/'+item.id,{headers:{Cookie:session}});
+   assert.equal(res.status,200,item.id);
+   const html=await res.text();
+   assert.equal((html.match(/<video\b/g)||[]).length,1,item.id);
+   assert.equal((html.match(/<track\b/g)||[]).length,0,item.id);
+   assert(!html.includes(' srclang='),item.id);
+   assert(html.includes('As legendas já estão integradas ao vídeo.'),item.id);
+   assert(html.includes('/marketing/captions/'+item.id),item.id);
+  }
+ } finally{
+  for(const key of newKeys)bytes.delete(key);
+ }
 });

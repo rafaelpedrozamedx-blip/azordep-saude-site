@@ -177,12 +177,14 @@ async function detail(item, saved=false) {
   const status = events.length ? events[0].status : item.status;
   const source = '/marketing/media/'+encodeURIComponent(item.id);
   const captions = '/marketing/captions/'+encodeURIComponent(item.id);
-  const language = item.project==='pet'?'en':'pt-BR';
   const player = row.video
     ? '<video controls playsinline preload="metadata" style="display:block;width:min(100%,420px);aspect-ratio:9/16;max-height:680px;background:#071b18;border-radius:12px" aria-label="Prévia '+escapeHTML(item.title)+'">'+
         '<source src="'+source+'" type="video/mp4">'+
-        (row.caption?'<track kind="captions" src="'+captions+'" srclang="'+language+'" label="'+(language==='en'?'English':'Português')+'" default>':'')+
+        // The exported MP4s already contain burnt-in captions. An extra
+        // VTT track doubles the subtitles, especially with default enabled.
         'Seu navegador não conseguiu reproduzir este vídeo.</video>'+
+        '<p class="small">As legendas já estão integradas ao vídeo. O player não adiciona uma segunda camada.</p>'+
+        (row.caption?'<p class="small"><a class="link" href="'+captions+'" target="_blank" rel="noopener">Consultar transcrição sincronizada (VTT)</a></p>':'')+
         '<p><a class="link" href="'+source+'" target="_blank" rel="noopener">Abrir MP4 isoladamente</a></p>'
     : '<div class="warn">Vídeo não anexado ao armazenamento privado. Registro editorial acessível, mas sem arquivo reproduzível.</div>';
   const notes = events.map(e=>'<li class="small"><strong>'+escapeHTML(e.status)+'</strong> · '+escapeHTML(e.createdAt||'')+
