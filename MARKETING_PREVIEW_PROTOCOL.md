@@ -17,8 +17,34 @@ Destino unico das novas previas: https://www.azordepsaude.com.br/marketing
 
 ## Estado em producao (23/11/2026)
 
-O acesso administrativo /marketing esta implantado no projeto Vercel azordep-saude-oficial, deployment dpl_8ew3ctMnXExY427cNBZMxtva5xrP. Os segredos de autenticacao foram configurados no ambiente Production e verificados somente pelos nomes, sem expor seus valores. Testes de producao confirmaram login HTTP 200, protecao de status HTTP 401 e rejeicao de admin/admin.
+Rota: https://www.azordepsaude.com.br/marketing.
+Vercel: azordep-saude-oficial (prj_3AfEaRMLJkBH16A3RChzoc1Aned3).
+Admin: usuario admin, senha forte nao armazenada no Git; login protegido.
 
-Limitacoes: existem apenas os metadados editoriais dos 15 criativos. Nenhuma midia inedita ou video esta hospedado nesta rota, tampouco ha persistencia de aprovacoes ou upload. A inclusao de videos reais exige armazenamento privado, autenticacao e controle de acesso, com avaliacao e aprovacao de custos.
+Armazenamento de video e legendas: Vercel Blob privado, nome azordep-marketing-private,
+store_dYkMMEPNX9mXbtc3, regiao gru1, vinculado ao projeto por OIDC sem chave estatica.
+15 MP4s e 15 arquivos de legenda privados foram enviados. O acesso ao arquivo e feito
+SOMENTE pelo gateway autenticado em /marketing/media/<id> e /marketing/captions/<id>.
+Para seek, a Function preserva o cabecalho Content-Range e responde 206.
 
-A branch main do GitHub deve preservar esta implementacao para evitar que um deploy futuro sobrescreva /marketing. A inclusao de qualquer novo criativo permanece sujeita aos gates acima.
+Decisoes: os botoes de aprovar, solicitar correcoes e bloquear no QA registram eventos
+append-only como JSON privado em reviews/<id>/, consultados pela pagina.
+Nenhuma decisao e autorizacao para publicar ou agendar.
+
+Limites: storage na conta Hobby (sem faturamento de excedente), mas sujeito
+aos limites da plataforma. Lote inicial ~91 MiB (<230 MiB guard).
+Nao colocar videos no repositorio publico ou links do Blob no HTML.
+
+## Novos lotes de previas
+
+A primeira versao tem IDs editoriais definidos no codigo. Para inserir novas pecas:
+1. Preparar e revisar o novo registro (ID, marca, data, tipo, status, CTA).
+2. Registrar o novo ID na lista do gateway; nao marcar aprovado sem Rafael.
+3. Fazer upload do MP4 e legenda ao Blob privado em media/<id>/master.mp4
+   e media/<id>/captions.vtt por CLI autenticada, verificando tamanho e formato.
+4. Revalidar que um visitante nao autenticado recebe 303 e que o administrador
+   pode ver e registrar aprovacao. Atualizar o projeto na Vercel apenas com autorizacao.
+5. Nao fazer upload se a cota Hobby estiver proxima do limite nem comprar planos automaticamente.
+
+O cadastro self-service de um ID inteiramente novo, sem novo deploy de codigo,
+ainda nao foi implementado. Nao alegar atualizacao automatica da galeria.

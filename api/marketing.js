@@ -7,6 +7,8 @@
  */
 
 const { randomBytes, createHmac, scryptSync, timingSafeEqual } = require('node:crypto');
+const { Readable } = require('node:stream');
+const storage = require('../lib/marketing-storage');
 
 const USERNAME = 'admin';
 const SESSION_COOKIE = '__Host-azordep-marketing';
@@ -109,7 +111,7 @@ function baseHeaders(type='text/html; charset=utf-8') {
     'Referrer-Policy': 'same-origin',
     'X-Robots-Tag': 'noindex, nofollow, noarchive',
     'Cross-Origin-Resource-Policy': 'same-origin',
-    'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'"
+    'Content-Security-Policy': "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'"
   };
 }
 function respond(res, status, body, type='text/html; charset=utf-8', additional={}) {
@@ -136,31 +138,102 @@ function loginHTML(message='') {
     '<button type="submit">Acessar prévias</button></form><p class="small">A senha pública “admin” está desabilitada por segurança. Configure uma senha forte no ambiente hospedado.</p></div></main>'
   );
 }
-function cardsFor(project) {
-  return ITEMS.filter(x=>x.project===project).map(item =>
-    '<article class="card"><div class="status">'+escapeHTML(item.status.replace(/_/g,' '))+'</div><h3>'+escapeHTML(item.title)+'</h3><p class="small">'+escapeHTML(item.qa)+'</p>' +
-    '<p class="meta">Mídia: aguardando armazenamento privado e vínculo autenticado.</p><a class="link" href="/marketing/preview/'+encodeURIComponent(item.id)+'">Ver registro</a></article>'
-  ).join('');
+function effectiveStatus(item, reviews) {
+  const review = reviews.get(item.id);
+  return review ? review.status : item.status;
 }
-function dashboard() {
+function cardsFor(project, media, reviews) {
+  return ITEMS.filter(x=>x.project===project).map(item => {
+    const row = media.get(item.id) || {};
+    const effective = effectiveStatus(item,reviews);
+    return '<article class="card"><div class="status">'+escapeHTML(effective.replace(/_/g,' '))+'</div><h3>'+escapeHTML(item.title)+'</h3><p class="small">'+escapeHTML(item.qa)+'</p>' +
+      '<p class="meta">Mídia: '+ (row.video ? 'vídeo privado disponível' : 'aguardando anexo') + (row.caption ? ' · legendas disponíveis' : '') + '</p>' +
+      '<a class="link" href="/marketing/preview/'+encodeURIComponent(item.id)+'">Ver prévia e registrar decisão</a></article>';
+  }).join('');
+}
+async function dashboard() {
+  const [media, reviews] = storage.configured()
+    ? await Promise.all([storage.mediaIndex(),storage.latestReviews(ITEMS.map(x=>x.id))])
+    : [new Map(),new Map()];
   const projectCards = PROJECTS.map(project=>'<article class="project">'+
     (project.image?'<img src="'+project.image+'" alt="Identidade oficial de '+escapeHTML(project.name)+'">':'<div class="eyebrow">PET &amp; PLACE</div>')+
     '<h3>'+escapeHTML(project.name)+'</h3><p class="small">'+escapeHTML(project.message)+'</p></article>').join('');
-  const sections = PROJECTS.map(project=>'<section id="'+project.id+'"><h2>'+escapeHTML(project.name)+'</h2><div class="cards">'+cardsFor(project.id)+'</div></section>').join('');
+  const sections = PROJECTS.map(project=>'<section id="'+project.id+'"><h2>'+escapeHTML(project.name)+'</h2><div class="cards">'+cardsFor(project.id,media,reviews)+'</div></section>').join('');
+  const count = ITEMS.filter(x=>media.get(x.id)?.video).length;
   return page('Central de prévias',
     '<main class="shell">'+header()+
-    '<div class="eyebrow" style="margin-top:26px">Fluxo editorial · 23 novembro 2026</div><h1>Prévias e aprovações</h1><p class="note">Esta é a rota canônica das prévias da AZORDEP. Acesso restrito. Estados de produção, QA, aprovação e publicação são separados e exigem evidência.</p>' +
-    '<aside class="warn"><strong>Proteção de mídia:</strong> ainda não há armazenamento privado conectado. Os 15 registros abaixo mostram o estado editorial; vídeos inéditos nunca devem ser copiados para o repositório público ou disponibilizados em links abertos.</aside>'+
+    '<div class="eyebrow" style="margin-top:26px">Fluxo editorial · 23 novembro 2026</div><h1>Prévias e aprovações</h1>' +
+    '<p class="note">Central privada AZORDEP. Assista aos vídeos, revise legendas, registre sua aprovação ou solicite correções. Decisões editoriais não agendam publicações.</p>' +
+    '<aside class="warn"><strong>'+count+' / '+ITEMS.length+' vídeos disponíveis em armazenamento privado.</strong> Os 12 Reels de Copiloto, O Iniciado e RMF continuam com reprovação visual até revisão. Pet &amp; Place tem aprovação criativa, mas checkout e QA comercial permanecem pendentes.</aside>'+
     '<div class="projects">'+projectCards+'</div>'+sections+
-    '<p class="small">Regra permanente: nova prévia → /marketing/preview/ID → QA → decisão Rafael → programação autorizada → publicação comprovada. A central ainda não grava aprovações nem hospeda arquivos.</p></main>'
+    '<p class="small">Fluxo: nova prévia → /marketing/preview/ID → QA → sua decisão persistida → programação autorizada separadamente → publicação comprovada.</p></main>'
   );
 }
-function detail(item) {
+async function detail(item, saved=false) {
+  const [media,events] = storage.configured()
+    ? await Promise.all([storage.mediaIndex(),storage.history(item.id)])
+    : [new Map(),[]];
+  const row = media.get(item.id) || {};
+  const status = events.length ? events[0].status : item.status;
+  const source = '/marketing/media/'+encodeURIComponent(item.id);
+  const captions = '/marketing/captions/'+encodeURIComponent(item.id);
+  const language = item.project==='pet'?'en':'pt-BR';
+  const player = row.video
+    ? '<video controls playsinline preload="metadata" style="display:block;width:min(100%,420px);aspect-ratio:9/16;max-height:680px;background:#071b18;border-radius:12px" aria-label="Prévia '+escapeHTML(item.title)+'">'+
+        '<source src="'+source+'" type="video/mp4">'+
+        (row.caption?'<track kind="captions" src="'+captions+'" srclang="'+language+'" label="'+(language==='en'?'English':'Português')+'" default>':'')+
+        'Seu navegador não conseguiu reproduzir este vídeo.</video>'+
+        '<p><a class="link" href="'+source+'" target="_blank" rel="noopener">Abrir MP4 isoladamente</a></p>'
+    : '<div class="warn">Vídeo não anexado ao armazenamento privado. Registro editorial acessível, mas sem arquivo reproduzível.</div>';
+  const notes = events.map(e=>'<li class="small"><strong>'+escapeHTML(e.status)+'</strong> · '+escapeHTML(e.createdAt||'')+
+    (e.note?' — '+escapeHTML(e.note):'')+'</li>').join('');
+  const form = '<form method="post" action="/marketing/review/'+encodeURIComponent(item.id)+'" class="card" style="max-width:640px">'+
+    '<h2>Registrar decisão</h2><p class="small">A aprovação é somente criativa: não publica nem agenda o post. Registros são permanentes e sucessivos.</p>'+
+    '<label for="note">Comentários e ajustes necessários</label><textarea id="note" name="note" maxlength="1200" rows="5" style="width:100%;border:1px solid #a7bac0;border-radius:8px;padding:12px;font:inherit" placeholder="Ex.: aumentar legenda, trocar cena genérica, revisar CTA"></textarea>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+    '<button type="submit" name="decision" value="CREATIVE_APPROVED">Aprovar criativo</button>'+
+    '<button type="submit" name="decision" value="REWORK_REQUIRED" style="background:#7b3542">Solicitar correções</button>'+
+    '<button type="submit" name="decision" value="QA_BLOCKED" style="background:#6d592a">Bloquear no QA</button>'+
+    '</div></form>';
   return page(item.title,'<main class="shell">'+header()+'<p><a class="link" href="/marketing">Voltar à central</a></p>'+
     '<div class="eyebrow">'+escapeHTML(item.project.toUpperCase())+'</div><h1>'+escapeHTML(item.title)+'</h1>'+
-    '<p class="status">'+escapeHTML(item.status)+'</p><div class="warn">'+escapeHTML(item.qa)+'</div>'+
-    '<p>Prévia protegida ainda não anexada. A inserção de mídia exige um armazenamento privado e URLs servidas por autenticação, sem arquivos inéditos no repositório público.</p>'+
+    '<p class="status">'+escapeHTML(status)+'</p><div class="warn">'+escapeHTML(item.qa)+'</div>'+
+    (saved?'<div class="warn" role="status">Decisão gravada no histórico privado.</div>':'')+
+    player + form +
+    '<h2>Histórico de decisões</h2>'+(events.length?'<ol>'+notes+'</ol>':'<p class="small">Ainda não há novas decisões gravadas para este criativo.</p>')+
     '<p class="small">URL canônica: https://www.azordepsaude.com.br/marketing/preview/'+encodeURIComponent(item.id)+'</p></main>');
+}
+async function mediaResponse(req,res,item,kind) {
+  if (!storage.configured()) return respond(res,503,'Storage unavailable','text/plain; charset=utf-8');
+  let result;
+  try { result = await storage.openMedia(item.id,kind,req.headers.range); }
+  catch (error) {
+    if(error instanceof TypeError) return respond(res,416,'Invalid byte range','text/plain; charset=utf-8');
+    throw error;
+  }
+  if (!result || !result.stream) return respond(res,404,'Media not available','text/plain; charset=utf-8');
+  const h = {
+    ...baseHeaders(kind==='video'?'video/mp4':'text/vtt; charset=utf-8'),
+    'Content-Type':kind==='video'?'video/mp4':'text/vtt; charset=utf-8',
+    'Accept-Ranges':'bytes',
+    'Content-Disposition':'inline',
+    'Cache-Control':'private, no-store'
+  };
+  for (const name of ['content-length','content-range','etag','last-modified']) {
+    const value = result.headers?.get(name);
+    if (value) h[name] = value;
+  }
+  if (result.blob?.size && !h['content-length'] && !req.headers.range) {
+    h['Content-Length']=String(result.blob.size);
+  }
+  // Blob SDK currently reports statusCode 200 for ranged reads even when
+  // content-range is present; preserve HTTP 206 for HTML5 video seeking.
+  const partial = Boolean(req.headers.range && (h['content-range'] || h['Content-Range']));
+  res.writeHead(partial || result.statusCode===206 ? 206 : 200,h);
+  if(req.method==='HEAD') { result.stream.cancel?.();return res.end(); }
+  const node = Readable.fromWeb(result.stream);
+  node.on('error',()=>{ if(!res.headersSent)res.writeHead(502);res.destroy(); });
+  node.pipe(res);
 }
 async function readBody(req) {
   if (req.body && typeof req.body === 'object') return new URLSearchParams(req.body).toString();
@@ -206,19 +279,68 @@ async function handler(req,res) {
       'Set-Cookie':SESSION_COOKIE+'=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0'
     });
   }
+  const reviewMatch = route.match(/^review\/([a-z0-9-]+)$/);
+  if (method==='POST' && reviewMatch) {
+    if (!verifySession(getCookies(req.headers.cookie)[SESSION_COOKIE])) return respond(res,401,'Authentication required','text/plain; charset=utf-8');
+    if (!sourceMatches(req)) return respond(res,403,'Origem inválida','text/plain; charset=utf-8');
+    const item=ITEMS.find(x=>x.id===reviewMatch[1]);
+    if (!item) return respond(res,404,'Unknown preview','text/plain; charset=utf-8');
+    if (!storage.configured()) return respond(res,503,'Private storage unavailable','text/plain; charset=utf-8');
+    let body;
+    try { body=await readBody(req); } catch(_) {return respond(res,413,'Invalid review size','text/plain; charset=utf-8');}
+    const values=new URLSearchParams(body);
+    const status=values.get('decision');
+    const note=values.get('note')||'';
+    if (!storage.VALID_DECISIONS.has(status) || note.length>1200) return respond(res,422,'Invalid review','text/plain; charset=utf-8');
+    try {
+      const current=await storage.history(item.id);
+      await storage.writeReview({previewId:item.id,status,note,previousStatus:current[0]?.status||item.status});
+    } catch(error) {
+      console.error('Review persistence failed:',error?.name||'unknown');
+      return respond(res,503,'Review could not be saved. Try again.','text/plain; charset=utf-8');
+    }
+    return respond(res,303,'','text/plain; charset=utf-8',{'Location':'/marketing/preview/'+item.id+'?saved=1'});
+  }
   if (!['GET','HEAD'].includes(method)) return respond(res,405,'Método não permitido.','text/plain; charset=utf-8',{'Allow':'GET, HEAD, POST'});
   if (!verifySession(getCookies(req.headers.cookie)[SESSION_COOKIE])) {
     if (route==='') return respond(res,200,method==='HEAD'?'':loginHTML());
     if (route==='status.json') return respond(res,401,'{"error":"authentication_required"}','application/json; charset=utf-8');
     return respond(res,303,'','text/plain; charset=utf-8',{'Location':'/marketing'});
   }
-  if (route==='' || route==='dashboard') return respond(res,200,method==='HEAD'?'':dashboard());
-  if (route==='status.json') return respond(res,200,method==='HEAD'?'':JSON.stringify({projects:PROJECTS.map(x=>({id:x.id,name:x.name})),previews:ITEMS.map(x=>({id:x.id,project:x.project,status:x.status,media_attached:false}))}),
-    'application/json; charset=utf-8');
+  if (route==='' || route==='dashboard') {
+    try { return respond(res,200,method==='HEAD'?'':await dashboard()); }
+    catch(error) {console.error('Dashboard blob read failed:',error?.name||'unknown');return respond(res,503,'Private storage temporarily unavailable','text/plain; charset=utf-8');}
+  }
+  if (route==='status.json') {
+    try {
+      const [media,reviews]=storage.configured()
+        ? await Promise.all([storage.mediaIndex(),storage.latestReviews(ITEMS.map(x=>x.id))])
+        : [new Map(),new Map()];
+      return respond(res,200,method==='HEAD'?'':JSON.stringify({
+        projects:PROJECTS.map(x=>({id:x.id,name:x.name})),
+        previews:ITEMS.map(x=>({id:x.id,project:x.project,status:effectiveStatus(x,reviews),media_attached:!!media.get(x.id)?.video}))
+      }), 'application/json; charset=utf-8');
+    } catch(error) {console.error('Private status read failed:',error?.name||'unknown');return respond(res,503,'Status unavailable','text/plain; charset=utf-8');}
+  }
+  const mediaMatch=route.match(/^(media|captions)\/([a-z0-9-]+)$/);
+  if (mediaMatch) {
+    const item=ITEMS.find(x=>x.id===mediaMatch[2]);
+    if(!item)return respond(res,404,'Unknown preview','text/plain; charset=utf-8');
+    try {return await mediaResponse(req,res,item,mediaMatch[1]==='media'?'video':'caption');}
+    catch(error){console.error('Private media unavailable:',error?.name||'unknown'); if(!res.headersSent)return respond(res,503,'Media unavailable','text/plain; charset=utf-8'); return res.destroy();}
+  }
   const match=route.match(/^preview\/([a-z0-9-]+)$/);
   if (match) {
     const item=ITEMS.find(x=>x.id===match[1]);
-    if (item) return respond(res,200,method==='HEAD'?'':detail(item));
+    if (item) {
+      try {
+        const saved=new URL(req.url,'https://www.azordepsaude.com.br').searchParams.get('saved')==='1';
+        return respond(res,200,method==='HEAD'?'':await detail(item,saved));
+      } catch(error) {
+        console.error('Private preview read failed:',error?.name||'unknown');
+        return respond(res,503,'Preview unavailable','text/plain; charset=utf-8');
+      }
+    }
   }
   return respond(res,404,page('Não encontrado','<main class="shell"><h1>Prévia não encontrada</h1><a href="/marketing">Voltar</a></main>'));
 }

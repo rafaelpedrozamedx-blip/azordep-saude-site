@@ -9,7 +9,8 @@
 - Os arquivos institucionais originais foram verificados sem alteracao: HTML, CSS e logo.
 - MARKETING_ADMIN_SCRYPT e MARKETING_SESSION_SECRET ja estao configuradas como segredos ocultos de Production. Nao os copie para este repositorio, chats ou Bridges.
 - Login de producao com a senha real: validar pelo proprio titular. A senha fraca admin/admin foi rejeitada em producao.
-- A interface tem 15 registros editoriais; ainda nao hospeda nem disponibiliza os videos.
+- A interface tem 15 registros editoriais e os 15 videos correspondentes no Blob privado, com suas legendas. A reproducao e protegida pelo login.
+- Aprovacoes, reprovacoes e bloqueios de QA geram registros JSON privados append-only, sem publicar posts.
 
 ## Preservacao no GitHub
 
@@ -31,7 +32,7 @@ Nao execute rotacao por rotina: as variaveis ja estao configuradas.
 
 ## Pendencias funcionais
 
-- Previas reais estao fora deste site. Antes de exibi-las, conectar armazenamento privado, URLs autenticadas e autorizacao de custos.
+- Midia atual armazenada no Blob privado azordep-marketing-private (store_dYkMMEPNX9mXbtc3), com OIDC e quota Hobby. Nunca usar URL do Blob privada diretamente no HTML; servir pela Function autenticada.
 - O painel nao persiste aprovacoes em banco e nao altera Metricool.
 - Aprovacao criativa da Pet & Place nao comprova checkout pago ou fulfillment CJ.
 - Os doze Reels antigos Copiloto, O Iniciado e RMF ainda estao marcados para reformulacao.

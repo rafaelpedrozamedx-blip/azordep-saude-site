@@ -6,6 +6,9 @@
     { "source": "/marketing/login", "destination": "/api/marketing?route=login" },
     { "source": "/marketing/logout", "destination": "/api/marketing?route=logout" },
     { "source": "/marketing/status.json", "destination": "/api/marketing?route=status.json" },
+    { "source": "/marketing/media/:id", "destination": "/api/marketing?route=media/:id" },
+    { "source": "/marketing/captions/:id", "destination": "/api/marketing?route=captions/:id" },
+    { "source": "/marketing/review/:id", "destination": "/api/marketing?route=review/:id" },
     { "source": "/marketing/preview/:id", "destination": "/api/marketing?route=preview/:id" }
   ]
 }

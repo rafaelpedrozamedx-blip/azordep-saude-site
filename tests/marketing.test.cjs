@@ -62,7 +62,7 @@ test('valid login, cookie, 15 reviews, no media, logout',async()=>{
  const html=await dash.text();
  assert.match(html,/AZORDEP Copiloto/);
  assert.match(html,/Pet &amp; Place/);
- assert.match(html,/Proteção de mídia/);
+ assert.match(html,/vídeos disponíveis em armazenamento privado/);
  assert.doesNotMatch(html,/<video[\s>]/);
  const data=await get('/marketing/status.json',{headers:{Cookie:token}});
  assert.equal(data.status,200);
