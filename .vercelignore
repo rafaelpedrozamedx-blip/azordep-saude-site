@@ -1,0 +1,16 @@
+.git/
+.vercel/
+tests/
+scripts/
+MARKETING_PREVIEW_PROTOCOL.md
+MANUAL_DE_ATIVACAO.md
+.env.example
+.env*
+*.log
+*.zip
+*.mp4
+*.mov
+*.wav
+*.m4a
+private-media/
+preview-media/

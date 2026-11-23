@@ -1,0 +1,100 @@
+'use strict';
+const { test, before, after } = require('node:test');
+const assert=require('node:assert/strict');
+const http=require('node:http');
+const { randomBytes,scryptSync }=require('node:crypto');
+const password='Testing-Strong-Only-Password-2026!';
+const salt=randomBytes(16).toString('hex');
+process.env.MARKETING_ADMIN_SCRYPT=salt+':'+scryptSync(password,Buffer.from(salt,'hex'),64,{N:16384,r:8,p:1}).toString('hex');
+process.env.MARKETING_SESSION_SECRET=randomBytes(48).toString('base64url');
+process.env.NODE_ENV='test';
+const handler=require('../api/marketing.js');
+let srv, origin;
+before(async()=>{
+ srv=http.createServer((req,res)=>handler(req,res));
+ await new Promise(resolve=>srv.listen(0,'127.0.0.1',resolve));
+ origin='http://127.0.0.1:'+srv.address().port;
+});
+after(async()=>{await new Promise(resolve=>srv.close(resolve));});
+const get=(path,options={})=>fetch(origin+path,{redirect:'manual',...options});
+const body=(username,pass)=>new URLSearchParams({username,password:pass}).toString();
+test('credentials fail-closed without configuration and weak password is disallowed',()=>{
+ assert(handler._test.secretsReady());
+ assert(!handler._test.verifyPassword('admin'));
+ assert(!handler._test.verifyPassword('password'));
+ assert(!handler._test.verifyPassword('Testing-incorrect-password'));
+ assert(handler._test.verifyPassword(password));
+});
+test('anonymous root displays only login and security headers',async()=>{
+ const r=await get('/marketing');
+ assert.equal(r.status,200);
+ const html=await r.text();
+ assert.match(html,/Entrar na central/);
+ assert.doesNotMatch(html,/Reel Copiloto/);
+ assert.match(r.headers.get('cache-control'),/no-store/);
+ assert.match(r.headers.get('content-security-policy'),/frame-ancestors 'none'/);
+ assert.equal(r.headers.get('x-robots-tag'),'noindex, nofollow, noarchive');
+});
+test('no anonymous access to private status or preview detail',async()=>{
+ const s=await get('/marketing/status.json');
+ assert.equal(s.status,401);
+ assert.deepEqual(await s.json(),{error:'authentication_required'});
+ const preview=await get('/marketing/preview/copiloto-20261123');
+ assert.equal(preview.status,303);
+ assert.equal(preview.headers.get('location'),'/marketing');
+});
+test('invalid origin and weak admin/admin are denied',async()=>{
+ const missing=await get('/marketing/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:body('admin',password)});
+ assert.equal(missing.status,403);
+ const incorrect=await get('/marketing/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded'},body:body('admin','admin')});
+ assert.equal(incorrect.status,401);
+ assert(!incorrect.headers.get('set-cookie'));
+});
+test('valid login, cookie, 15 reviews, no media, logout',async()=>{
+ const login=await get('/marketing/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/x-www-form-urlencoded'},body:body('admin',password)});
+ assert.equal(login.status,303);
+ const cookie=login.headers.get('set-cookie');
+ assert(cookie && cookie.includes('__Host-azordep-marketing='));
+ for(const part of ['HttpOnly','Secure','SameSite=Strict','Path=/'])assert(cookie.includes(part),part);
+ const token=cookie.split(';')[0];
+ const dash=await get('/marketing',{headers:{Cookie:token}});
+ assert.equal(dash.status,200);
+ const html=await dash.text();
+ assert.match(html,/AZORDEP Copiloto/);
+ assert.match(html,/Pet &amp; Place/);
+ assert.match(html,/Proteção de mídia/);
+ assert.doesNotMatch(html,/<video[\s>]/);
+ const data=await get('/marketing/status.json',{headers:{Cookie:token}});
+ assert.equal(data.status,200);
+ const obj=await data.json();
+ assert.equal(obj.previews.length,15);
+ assert(obj.previews.every(x=>x.media_attached===false));
+ assert.equal(obj.previews.filter(x=>x.status==='REWORK_REQUIRED').length,12);
+ assert.equal(obj.previews.filter(x=>x.status==='CREATIVE_APPROVED').length,3);
+ const detail=await get('/marketing/preview/copiloto-20261123',{headers:{Cookie:token}});
+ assert.equal(detail.status,200);
+ assert.match(await detail.text(),/REWORK_REQUIRED/);
+ const unknown=await get('/marketing/preview/does-not-exist',{headers:{Cookie:token}});
+ assert.equal(unknown.status,404);
+ const log=await get('/marketing/logout',{method:'POST',headers:{Origin:origin,Cookie:token}});
+ assert.equal(log.status,303);
+ assert.match(log.headers.get('set-cookie'),/Max-Age=0/);
+});
+test('invalid or forged sessions are denied',async()=>{
+ const forged=await get('/marketing/status.json',{headers:{Cookie:'__Host-azordep-marketing=v1.1795000000.abcd.1234'}});
+ assert.equal(forged.status,401);
+});
+test('HTTP method constraints and fake routes',async()=>{
+ const r=await get('/marketing',{method:'DELETE'});
+ assert.equal(r.status,405);
+ const r2=await get('/api/marketing?route=status.json');
+ assert.equal(r2.status,401);
+});
+test('Vercel rewrite and repo media policy',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const config=JSON.parse(fs.readFileSync(path.resolve(__dirname,'../vercel.json'),'utf8'));
+ assert(config.rewrites.some(x=>x.source==='/marketing' && x.destination==='/api/marketing'));
+ assert(config.rewrites.some(x=>x.source==='/marketing/preview/:id'));
+ assert.equal(handler._test.requestRoute({url:'/api/marketing?route=preview%2Fcopiloto-20261123'}),'preview/copiloto-20261123');
+ assert(!fs.readdirSync(path.resolve(__dirname,'..')).some(x=>x.endsWith('.mp4')));
+});

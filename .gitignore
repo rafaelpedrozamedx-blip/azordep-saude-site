@@ -1,0 +1,15 @@
+.env*
+!.env.example
+node_modules/
+.DS_Store
+*.mp4
+*.mov
+*.wav
+*.m4a
+*.zip
+private-media/
+preview-media/
+coverage/
+
+.vercel/
+.vercel

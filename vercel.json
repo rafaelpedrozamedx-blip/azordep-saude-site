@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/marketing", "destination": "/api/marketing" },
+    { "source": "/marketing/", "destination": "/api/marketing" },
+    { "source": "/marketing/login", "destination": "/api/marketing?route=login" },
+    { "source": "/marketing/logout", "destination": "/api/marketing?route=logout" },
+    { "source": "/marketing/status.json", "destination": "/api/marketing?route=status.json" },
+    { "source": "/marketing/preview/:id", "destination": "/api/marketing?route=preview/:id" }
+  ]
+}
